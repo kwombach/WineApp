@@ -6,8 +6,10 @@ import string
 import unicodedata
 import html
 
+
 def find_ngrams(input_list, n):
   return zip(*[input_list[i:] for i in range(n)])
+
 
 def main(filename):
     con_wdb = sqlite3.connect('wineapp.db')
@@ -28,6 +30,7 @@ def main(filename):
                 .encode('ascii', 'ignore') \
                 .decode("utf-8") \
                 .replace(' ', '+') \
+                .replace('&+', '') \
                 .replace('.', '') \
                 .lower()
             wine_name_fancy = html.unescape(row[6])
@@ -111,6 +114,65 @@ def convert_reviews_to_word_freq_dicts():
     df.to_sql('wine_raw_processed_reviews', con)
     con.commit()
 
+
+def scraped_wine_raw():
+    con_wdb = sqlite3.connect('wineapp.db')
+
+    c = con_wdb.cursor()
+
+    c.execute('DROP TABLE IF EXISTS scraped_wine_data')
+    c.execute(
+        'CREATE TABLE scraped_wine_data (scraped_wine_id,scraped_wine_search_term,scraped_wine_match'
+        ',scraped_wine_price, scraped_wine_location);')
+    con_wdb.commit()
+
+    # Create a CSV reader
+    filestream = open("scraped_wine_prices_locations_clean.txt", "r")
+    next(filestream, None)
+    for line in filestream:
+        if 'FAIL' not in line:
+            row = line.split(',')
+            #############################################
+            # Add OPTIONAL drop of main raw table for size reduction.
+            # FIX wine prices >999.99
+            # FIX commas in wine search name (manually)
+            # FIX make notes for future reference in scraper for wrapping outputs in for ease of processing.
+            # Never make this mistake again.............
+            #############################################
+            # print(row[0], row[1], row[2], row[3], row[4])
+            try:
+                c.execute('''
+                    INSERT INTO scraped_wine_data (scraped_wine_id,scraped_wine_search_term,scraped_wine_match
+                    ,scraped_wine_price, scraped_wine_location) VALUES (?,?,?,?,?)''',
+                    (row[0], row[1], row[2], row[3], row[4]))
+            except sqlite3.Error as e:
+                print("Raw Wine, insert error:", e.args[0])
+
+    con_wdb.commit()
+
+
+def raw_wine_data_with_scraped(drop_table=False):
+
+    con = sqlite3.connect('wineapp.db')
+    cur = con.cursor()
+    cur.execute('DROP TABLE IF EXISTS raw_wine_data_with_scraped')
+    cur.execute(
+        'CREATE TABLE raw_wine_data_with_scraped (chunk_id,review_points,review_text,review_time,review_userId,'
+        'review_userName,wine_name,wine_variant,wine_wineId,wine_year,wine_name_fancy,'
+        'wine_name_plain,wine_name_search,scraped_wine_id,scraped_wine_search_term,scraped_wine_match'
+        ',scraped_wine_price, scraped_wine_location);')
+    con.commit()
+    cur.execute('''INSERT INTO raw_wine_data_with_scraped
+                   SELECT * FROM wine_data_raw r
+                   LEFT JOIN scraped_wine_data s
+                   ON s.scraped_wine_id = r.wine_wineId''')
+
+    if drop_table:
+        cur.execute('DROP TABLE IF EXISTS wine_data_raw')
+
+    con.commit()
+
+
 if __name__ == '__main__':
     con = sqlite3.connect('wineapp.db')
     cur = con.cursor()
@@ -126,4 +188,7 @@ if __name__ == '__main__':
     populate_wines()
     populate_users()
     convert_reviews_to_word_freq_dicts()
+    scraped_wine_raw()
+    raw_wine_data_with_scraped(drop_table=True)
+
 
