@@ -296,6 +296,7 @@ def populate_reviews(drop_table=False):
     if drop_table:
         cur.execute('DROP TABLE IF EXISTS wine_data_raw')
         cur.execute('DROP TABLE IF EXISTS scraped_wine_data')
+        cur.execute('DROP TABLE IF EXISTS raw_wine_data_with_scraped')
 
     con.commit()
 
