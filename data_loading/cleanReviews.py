@@ -15,7 +15,7 @@ stemmer = PorterStemmer()
 def getReviews():
 	con = sqlite3.connect('wineapp.db')
 	cur = con.cursor()
-	sql = '''SELECT wine_wineId_int FROM wines ORDER by wine_qty_reviews DESC LIMIT 50'''
+	sql = '''SELECT wine_wineId_int FROM wines ORDER by wine_qty_reviews DESC LIMIT 41911'''
 	wine_ids = pd.read_sql(sql, con)
 
 	n = wine_ids.shape[0]
@@ -61,7 +61,7 @@ def vectorize(list_of_strings):
 
 def getSimilarity(vectorized_matrix):
 	n = vectorized_matrix.shape[0]
-	#dists = pairwise_distances(vectorized_matrix, metric = 'cosine', n_jobs = -1)
+	# dists = pairwise_distances(vectorized_matrix, metric = 'cosine', n_jobs = -1)
 	sim_matrix = cosine_similarity(vectorized_matrix[0:n], vectorized_matrix)
 	return sim_matrix
 
@@ -71,6 +71,7 @@ def run():
 	similarity_matrix = getSimilarity(matrix)
 	df = pd.DataFrame(similarity_matrix)
 	df.to_csv('similarity_matrix.csv')
+	print('.csv file made!')
 	return similarity_matrix
 
 run()
