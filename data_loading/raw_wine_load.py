@@ -4,10 +4,11 @@ import pandas as pd
 import string
 import unicodedata
 import html
+from collections import Counter
 
 
 def find_ngrams(input_list, n):
-  return zip(*[input_list[i:] for i in range(n)])
+    return zip(*[input_list[i:] for i in range(n)])
 
 
 def main(filename):
@@ -33,8 +34,14 @@ def main(filename):
                 .lower()
             # adding back some terms for potential future use.
             wine_name_fancy = html.unescape(row[6])
-            wine_name_plain = unicodedata.normalize('NFKD', html.unescape(row[6]))\
-                .encode('ascii', 'ignore')\
+            wine_name_plain = unicodedata.normalize('NFKD', html.unescape(row[6])) \
+                .encode('ascii', 'ignore') \
+                .decode("utf-8")
+            review_text_plain = unicodedata.normalize('NFKD', html.unescape(row[2])) \
+                .encode('ascii', 'ignore') \
+                .decode("utf-8")
+            wine_variant_plain = unicodedata.normalize('NFKD', html.unescape(row[7])) \
+                .encode('ascii', 'ignore') \
                 .decode("utf-8")
             c.execute('''
                 INSERT INTO wine_data_raw (
@@ -51,8 +58,8 @@ def main(filename):
                 wine_name_fancy,
                 wine_name_plain,
                 wine_name_search) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ''', (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9],
-                      wine_name_fancy,wine_name_plain,wine_name_search))
+                ''', (row[0], row[1], review_text_plain, row[3], row[4], row[5], row[6], wine_variant_plain, row[8], row[9],
+                      wine_name_fancy, wine_name_plain, wine_name_search))
 
         # Catch errors
         except sqlite3.Error as e:
@@ -101,7 +108,7 @@ def scraped_wine_raw():
                     scraped_wine_match,
                     scraped_wine_price, 
                     scraped_wine_location) VALUES (?,?,?,?,?)''',
-                    (row[0], row[1], row[2], row[3], row[4]))
+                          (row[0], row[1], row[2], row[3], row[4]))
             except sqlite3.Error as e:
                 print("scraped_wine, insert error:", e.args[0])
 
@@ -109,7 +116,6 @@ def scraped_wine_raw():
 
 
 def raw_wine_data_with_scraped(drop_table=False):
-
     con = sqlite3.connect('wineapp.db')
     cur = con.cursor()
     cur.execute('DROP TABLE IF EXISTS raw_wine_data_with_scraped')
@@ -158,6 +164,7 @@ def raw_wine_data_with_scraped(drop_table=False):
 
     con.commit()
 
+
 def populate_wines_new():
     con = sqlite3.connect('wineapp.db')
     cur = con.cursor()
@@ -194,7 +201,7 @@ def populate_wines_new():
                    lev1.scraped_wine_location,
                    lev2.wine_qty_reviews 
               FROM (
-                    SELECT CAST(wine_wineId as int) as wine_wineId_int,
+                    SELECT CAST(wine_wineId AS INT) AS wine_wineId_int,
                            wine_name, 
                            wine_variant, 
                            wine_year,
@@ -213,7 +220,7 @@ def populate_wines_new():
                                    wine_name, 
                                    wine_variant, 
                                    wine_year,
-                                   count(*) as qty_reviews,
+                                   count(*) AS qty_reviews,
                                    wine_year,
                                    wine_name_fancy,
                                    wine_name_plain,
@@ -242,7 +249,7 @@ def populate_wines_new():
                       ORDER BY wine_wineId_int ASC
                     ) lev1
               LEFT JOIN (
-                        SELECT COUNT(wine_wineId) as wine_qty_reviews, CAST(wine_wineId as int) as wine_wineId_int
+                        SELECT COUNT(wine_wineId) AS wine_qty_reviews, CAST(wine_wineId AS INT) AS wine_wineId_int
                         FROM wine_data_raw
                         GROUP BY wine_wineId
                         ) lev2
@@ -262,7 +269,7 @@ def populate_users():
                                 users_qty_reviews);''')
     con.commit()
     cur.execute('''INSERT INTO users 
-                   SELECT review_userId, review_userName, count(*) as qty_reviews
+                   SELECT review_userId, review_userName, count(*) AS qty_reviews
                      FROM wine_data_raw
                     GROUP BY review_userId, review_userName
                     ORDER BY qty_reviews DESC''')
@@ -287,7 +294,7 @@ def populate_reviews(drop_table=False):
                           review_text,
                           review_time,
                           review_userId,
-                          CAST(wine_wineId as int) as review_wineId_int
+                          CAST(wine_wineId AS INT) AS review_wineId_int
                      FROM wine_data_raw r''')
 
     #############################################
@@ -301,41 +308,137 @@ def populate_reviews(drop_table=False):
     con.commit()
 
 
-def convert_reviews_to_word_freq_dicts():
-    # d = pyenchant.Dict("en_US")
+def top_words_from_reviews_by_wine():
     con = sqlite3.connect('wineapp.db')
     cur = con.cursor()
-    sql = '''SELECT chunk_id,
-                    review_points,
-                    review_text,
-                    review_time,
-                    review_userId,
-                    review_userName,
-                    wine_name,
-                    wine_variant,
-                    wine_wineId
-               FROM wine_data_raw'''
-    df = pd.read_sql(sql, con)
+    cur.execute('DROP TABLE IF EXISTS top_words_from_reviews_by_wine')
+    cur.execute('''CREATE TABLE top_words_from_reviews_by_wine (
+                        review_wineId_int,
+                        word_cloud);''')
     con.commit()
 
-    for review in df.values:
-        review_holder_dict = {}
-        processed_string_list = review[2].translate(str.maketrans('', '', string.punctuation)).lower().split()
-        #####################################################
-        # REMOVE COMMON WORDS AND MAYBE CHECK SPELLING HERE #
-        #####################################################
-        processed_string_list += list(find_ngrams(processed_string_list, 2))
+    sql = '''SELECT r.review_wineId_int, r.review_text, w.wine_name_plain, w.scraped_wine_price, w.wine_qty_reviews
+               FROM reviews r
+               LEFT JOIN wines w
+                 ON r.review_wineId_int = w.wine_wineId_int
+              WHERE r.review_wineId_int IN 
+                                            (
+                                            SELECT wine_wineId_int
+                                              FROM wines
+                                             ORDER BY wine_qty_reviews DESC
+                                             LIMIT 41911
+                                            )
+           ORDER BY r.review_wineId_int DESC'''
 
-        for word in processed_string_list:
-            if word in review_holder_dict:
-                review_holder_dict[word] += 1
-            else:
-                review_holder_dict[word] = 1
+    df = pd.read_sql(sql, con)
 
-        review[2] = str(review_holder_dict)
+    group_sql = '''SELECT wine_wineId_int
+                      FROM wines
+                     ORDER BY wine_qty_reviews DESC
+                     LIMIT 41911
+                    '''
 
-    cur.execute('DROP TABLE IF EXISTS wine_raw_processed_reviews')
-    df.to_sql('wine_raw_processed_reviews', con)
+    grouper_df = pd.read_sql(group_sql, con)
+
+    # Ignore this:
+    # Side note for text wrangler for regex search to select all numbers \d{1,7}
+
+    for group in grouper_df.values:
+        group_review_df = df.loc[df['review_wineId_int'] == group[0]]
+        group_corpus_list = [i.translate(str.maketrans('', '', string.punctuation)).lower()
+                             for i in group_review_df['review_text']]
+
+        counts = Counter()
+
+        for text in group_corpus_list:
+            counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+
+        # print(counts)
+        # print(counts.most_common(100))
+        # exit()
+        counts = low_weight_words(counts)
+        try:
+            cur.execute('''
+                INSERT INTO top_words_from_reviews_by_wine (
+                        review_wineId_int,
+                        word_cloud) VALUES (?,?)''',
+                        (int(group[0]), str(counts.most_common(100))))
+            counts.clear()
+            counts += Counter()
+        except sqlite3.Error as e:
+            print("Top words by wine, insert error:", e.args[0])
+            counts.clear()
+            counts += Counter()
+
+    con.commit()
+
+
+def top_words_from_reviews_by_variant():
+    con = sqlite3.connect('wineapp.db')
+    cur = con.cursor()
+    cur.execute('DROP TABLE IF EXISTS top_words_from_reviews_by_variant')
+    cur.execute('''CREATE TABLE top_words_from_reviews_by_variant (
+                        wine_variant,
+                        word_cloud);''')
+    con.commit()
+
+    sql = '''SELECT r.review_wineId_int, r.review_text, w.wine_name_plain, w.wine_variant, w.scraped_wine_price, w.wine_qty_reviews
+               FROM reviews r
+               LEFT JOIN wines w
+                 ON r.review_wineId_int = w.wine_wineId_int
+              WHERE r.review_wineId_int IN 
+                                            (
+                                            SELECT wine_wineId_int
+                                              FROM wines
+                                             ORDER BY wine_qty_reviews DESC
+                                             LIMIT 41911
+                                            )
+           ORDER BY r.review_wineId_int DESC'''
+
+    df = pd.read_sql(sql, con)
+
+    group_sql = '''SELECT wine_variant
+                   FROM (
+                        SELECT wine_variant
+                          FROM wines
+                         ORDER BY wine_qty_reviews DESC
+                         LIMIT 41911
+                        )
+                   GROUP BY wine_variant
+                    '''
+
+    grouper_df = pd.read_sql(group_sql, con)
+
+    # Ignore this:
+    # Side note for text wrangler for regex search to select all numbers \d{1,7}
+
+    for group in grouper_df.values:
+        group_review_df = df.loc[df['wine_variant'] == group[0]]
+        group_corpus_list = [i.translate(str.maketrans('', '', string.punctuation)).lower()
+                             for i in group_review_df['review_text']]
+
+        counts = Counter()
+
+        for text in group_corpus_list:
+            counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+
+        # print(counts)
+        # print(counts.most_common(100))
+        # exit()
+        counts = low_weight_words(counts)
+        try:
+            cur.execute('''
+                INSERT INTO top_words_from_reviews_by_variant (
+                        wine_variant,
+                        word_cloud) VALUES (?,?)''',
+                        (str(group[0]), str(counts.most_common(100))))
+            counts.clear()
+            counts += Counter()
+        except sqlite3.Error as e:
+            print("Top words by variant, insert error:", e.args[0])
+            counts.clear()
+            counts += Counter()
+
     con.commit()
 
 
@@ -355,7 +458,7 @@ def populate_wines_old():
         'wine_name_search);')
     con.commit()
     cur.execute('''INSERT INTO wines 
-                   SELECT wine_wineId, wine_name, wine_variant, wine_year, count(*) as qty_reviews
+                   SELECT wine_wineId, wine_name, wine_variant, wine_year, count(*) AS qty_reviews
                    ,wine_name_fancy
                    ,wine_name_plain
                    ,wine_name_search
@@ -363,6 +466,205 @@ def populate_wines_old():
                     GROUP BY wine_wineId, wine_name, wine_variant, wine_year
                     ORDER BY qty_reviews DESC''')
     con.commit()
+
+
+def low_weight_words(counter):
+    low_weight = Counter(grand=100000,
+                         weight=100000,
+                         acid=100000,
+                         tones=100000,
+                         mouthfeel=100000,
+                         hint=100000,
+                         nose=100000,
+                         finish=100000,
+                         bottle=100000,
+                         palate=100000,
+                         acidity=100000,
+                         long=100000,
+                         color=100000,
+                         little=100000,
+                         aromas=100000,
+                         delicious=100000,
+                         age=100000,
+                         the=100000,
+                         a=100000,
+                         of=100000,
+                         this=100000,
+                         to=100000,
+                         i=100000,
+                         on=100000,
+                         it=100000,
+                         very=100000,
+                         but=100000,
+                         was=100000,
+                         that=100000,
+                         more=100000,
+                         notes=100000,
+                         good=100000,
+                         great=100000,
+                         some=100000,
+                         wine=100000,
+                         at=100000,
+                         had=100000,
+                         nice=100000,
+                         have=100000,
+                         an=100000,
+                         years=100000,
+                         fine=100000,
+                         just=100000,
+                         well=100000,
+                         my=100000,
+                         really=100000,
+                         bit=100000,
+                         its=100000,
+                         flavors=100000,
+                         so=100000,
+                         label=100000,
+                         one=100000,
+                         time=100000,
+                         than=100000,
+                         full=100000,
+                         much=100000,
+                         still=100000,
+                         always=100000,
+                         all=100000,
+                         by=100000,
+                         nv=100000,
+                         better=100000,
+                         up=100000,
+                         lovely=100000,
+                         be=100000,
+                         mouth=100000,
+                         beautiful=100000,
+                         glass=100000,
+                         like=100000,
+                         there=100000,
+                         quite=100000,
+                         new=100000,
+                         balance=100000,
+                         no=100000,
+                         me=100000,
+                         has=100000,
+                         taste=100000,
+                         drink=100000,
+                         excellent=100000,
+                         you=100000,
+                         last=100000,
+                         best=100000,
+                         bottles=100000,
+                         almost=100000,
+                         out=100000,
+                         tasted=100000,
+                         what=100000,
+                         showing=100000,
+                         white=100000,
+                         wonderful=100000,
+                         over=100000,
+                         opened=100000,
+                         too=100000,
+                         drank=100000,
+                         been=100000,
+                         first=100000,
+                         after=100000,
+                         we=100000,
+                         would=100000,
+                         served=100000,
+                         when=100000,
+                         slightly=100000,
+                         touch=100000,
+                         though=100000,
+                         could=100000,
+                         which=100000,
+                         again=100000,
+                         price=100000,
+                         get=100000,
+                         purchased=100000,
+                         ive=100000,
+                         about=100000,
+                         lots=100000,
+                         way=100000,
+                         are=100000,
+                         year=100000,
+                         off=100000,
+                         will=100000,
+                         note=100000,
+                         same=100000,
+                         colour=100000,
+                         right=100000,
+                         were=100000,
+                         maybe=100000,
+                         even=100000,
+                         back=100000,
+                         another=100000,
+                         previous=100000,
+                         think=100000,
+                         now=100000,
+                         flavours=100000,
+                         ago=100000,
+                         tasting=100000,
+                         stuff=100000,
+                         other=100000,
+                         cellar=100000,
+                         sure=100000,
+                         can=100000,
+                         many=100000,
+                         half=100000,
+                         few=100000,
+                         ever=100000,
+                         power=100000,
+                         showed=100000,
+                         two=100000,
+                         dinner=100000,
+                         love=100000,
+                         yet=100000,
+                         character=100000,
+                         fantastic=100000,
+                         ml=100000,
+                         drinking=100000,
+                         en=100000,
+                         experience=100000,
+                         amazing=100000,
+                         tasty=100000,
+                         least=100000,
+                         hue=100000,
+                         immediately=100000,
+                         probably=100000,
+                         recent=100000,
+                         length=100000,
+                         de=100000,
+                         less=100000,
+                         most=100000,
+                         hints=100000,
+                         wines=100000,
+                         focused=100000,
+                         food=100000,
+                         throughout=100000,
+                         im=100000,
+                         lot=100000,
+                         perfect=100000,
+                         how=100000,
+                         through=100000,
+                         air=100000,
+                         nicely=100000,
+                         should=100000,
+                         every=100000,
+                         wow=100000,
+                         only=100000,
+                         although=100000,
+                         start=100000,
+                         magnum=100000,
+                         flavor=100000,
+                         seemed=100000,
+                         day=100000,
+                         before=100000,
+                         different=100000,
+                         end=100000,
+                         subtle=100000,
+                         celebrate=100000,
+                         expect=100000,
+                         rather=100000,
+                         impressive=100000)
+    return counter-low_weight
 
 
 if __name__ == '__main__':
@@ -393,6 +695,8 @@ if __name__ == '__main__':
     raw_wine_data_with_scraped()
     populate_wines_new()
     populate_users()
+    top_words_from_reviews_by_wine()
+    top_words_from_reviews_by_variant()
 
     #############################################
     # DO THIS LAST: This should drop some tables. If you're tempted to NOT drop the tables. Review data
@@ -405,9 +709,3 @@ if __name__ == '__main__':
     # Older Routines or Unused
     #############################################
     # populate_wines()
-    # convert_reviews_to_word_freq_dicts()
-
-
-
-
-
