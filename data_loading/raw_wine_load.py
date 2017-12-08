@@ -5,6 +5,8 @@ import string
 import unicodedata
 import html
 from collections import Counter
+import text_processor
+from nltk.corpus import stopwords
 
 
 def find_ngrams(input_list, n):
@@ -12,6 +14,12 @@ def find_ngrams(input_list, n):
 
 
 def main(filename):
+
+    stop_words = stopwords.words('english')
+
+    for line in open('low_weight_words.txt', 'r'):
+        stop_words.append(line.strip())
+
     con_wdb = sqlite3.connect('wineapp.db')
 
     c = con_wdb.cursor()
@@ -21,7 +29,7 @@ def main(filename):
 
     # Skip header
     next(reader, None)
-
+    progress_counter = 0
     for row in reader:
         try:
             # getting rid of HTML characters and whatnot for URL searches.
@@ -43,6 +51,15 @@ def main(filename):
             wine_variant_plain = unicodedata.normalize('NFKD', html.unescape(row[7])) \
                 .encode('ascii', 'ignore') \
                 .decode("utf-8")
+            review_text_lem_no_stop = text_processor.remove_stop_then_lem(review_text_plain.lower(), stop_words)
+
+            if len(review_text_lem_no_stop) < 3:
+                progress_counter += 1
+                if progress_counter % 20000 == 0:
+                    print('Raw Wine Load Records Processed (skip):', progress_counter)
+                    con_wdb.commit()
+                continue
+
             c.execute('''
                 INSERT INTO wine_data_raw (
                 chunk_id,
@@ -57,9 +74,15 @@ def main(filename):
                 wine_year,
                 wine_name_fancy,
                 wine_name_plain,
-                wine_name_search) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                wine_name_search,
+                review_text_lem_no_stop) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ''', (row[0], row[1], review_text_plain, row[3], row[4], row[5], row[6], wine_variant_plain, row[8], row[9],
-                      wine_name_fancy, wine_name_plain, wine_name_search))
+                      wine_name_fancy, wine_name_plain, wine_name_search, review_text_lem_no_stop))
+
+            progress_counter += 1
+            if progress_counter % 20000 == 0:
+                print('Raw Wine Load Records Processed:', progress_counter)
+                con_wdb.commit()
 
         # Catch errors
         except sqlite3.Error as e:
@@ -137,7 +160,8 @@ def raw_wine_data_with_scraped(drop_table=False):
                     scraped_wine_search_term,
                     scraped_wine_match,
                     scraped_wine_price,
-                    scraped_wine_location);''')
+                    scraped_wine_location,
+                    review_text_lem_no_stop);''')
     con.commit()
     cur.execute('''INSERT INTO raw_wine_data_with_scraped
                    SELECT * FROM wine_data_raw r
@@ -286,6 +310,7 @@ def populate_reviews(drop_table=False):
                     review_time,
                     review_userId,
                     review_wineId_int,
+                    review_text_lem_no_stop,
                     FOREIGN KEY (review_userId) REFERENCES users(users_userId),
                     FOREIGN KEY (review_wineId_int) REFERENCES wines(wine_wineId_int));''')
     con.commit()
@@ -294,7 +319,8 @@ def populate_reviews(drop_table=False):
                           review_text,
                           review_time,
                           review_userId,
-                          CAST(wine_wineId AS INT) AS review_wineId_int
+                          CAST(wine_wineId AS INT) AS review_wineId_int,
+                          review_text_lem_no_stop
                      FROM wine_data_raw r''')
 
     #############################################
@@ -317,7 +343,8 @@ def top_words_from_reviews_by_wine():
                         word_cloud);''')
     con.commit()
 
-    sql = '''SELECT r.review_wineId_int, r.review_text, w.wine_name_plain, w.scraped_wine_price, w.wine_qty_reviews
+    sql = '''SELECT r.review_wineId_int, r.review_text_lem_no_stop, w.wine_name_plain, 
+                    w.scraped_wine_price, w.wine_qty_reviews
                FROM reviews r
                LEFT JOIN wines w
                  ON r.review_wineId_int = w.wine_wineId_int
@@ -345,8 +372,7 @@ def top_words_from_reviews_by_wine():
 
     for group in grouper_df.values:
         group_review_df = df.loc[df['review_wineId_int'] == group[0]]
-        group_corpus_list = [i.translate(str.maketrans('', '', string.punctuation)).lower()
-                             for i in group_review_df['review_text']]
+        group_corpus_list = [i for i in group_review_df['review_text_lem_no_stop']]
 
         counts = Counter()
 
@@ -356,7 +382,7 @@ def top_words_from_reviews_by_wine():
         # print(counts)
         # print(counts.most_common(100))
         # exit()
-        counts = low_weight_words(counts)
+        # counts = low_weight_words(counts)
         try:
             cur.execute('''
                 INSERT INTO top_words_from_reviews_by_wine (
@@ -382,7 +408,8 @@ def top_words_from_reviews_by_variant():
                         word_cloud);''')
     con.commit()
 
-    sql = '''SELECT r.review_wineId_int, r.review_text, w.wine_name_plain, w.wine_variant, w.scraped_wine_price, w.wine_qty_reviews
+    sql = '''SELECT r.review_wineId_int, r.review_text_lem_no_stop, w.wine_name_plain, w.wine_variant,
+                    w.scraped_wine_price, w.wine_qty_reviews
                FROM reviews r
                LEFT JOIN wines w
                  ON r.review_wineId_int = w.wine_wineId_int
@@ -414,8 +441,7 @@ def top_words_from_reviews_by_variant():
 
     for group in grouper_df.values:
         group_review_df = df.loc[df['wine_variant'] == group[0]]
-        group_corpus_list = [i.translate(str.maketrans('', '', string.punctuation)).lower()
-                             for i in group_review_df['review_text']]
+        group_corpus_list = [i for i in group_review_df['review_text_lem_no_stop']]
 
         counts = Counter()
 
@@ -425,7 +451,7 @@ def top_words_from_reviews_by_variant():
         # print(counts)
         # print(counts.most_common(100))
         # exit()
-        counts = low_weight_words(counts)
+        # counts = low_weight_words(counts)
         try:
             cur.execute('''
                 INSERT INTO top_words_from_reviews_by_variant (
@@ -685,7 +711,8 @@ if __name__ == '__main__':
                     wine_year,
                     wine_name_fancy,
                     wine_name_plain,
-                    wine_name_search);''')
+                    wine_name_search,
+                    review_text_lem_no_stop);''')
     con.commit()
 
     main('cellartracker-clean1.csv')
@@ -695,8 +722,6 @@ if __name__ == '__main__':
     raw_wine_data_with_scraped()
     populate_wines_new()
     populate_users()
-    top_words_from_reviews_by_wine()
-    top_words_from_reviews_by_variant()
 
     #############################################
     # DO THIS LAST: This should drop some tables. If you're tempted to NOT drop the tables. Review data
@@ -704,6 +729,8 @@ if __name__ == '__main__':
     #############################################
 
     populate_reviews(drop_table=True)
+    top_words_from_reviews_by_wine()
+    top_words_from_reviews_by_variant()
 
     #############################################
     # Older Routines or Unused
