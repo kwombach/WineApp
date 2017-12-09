@@ -7,7 +7,7 @@ import html
 from collections import Counter
 import text_processor
 from nltk.corpus import stopwords
-
+from datetime import datetime
 
 def find_ngrams(input_list, n):
     return zip(*[input_list[i:] for i in range(n)])
@@ -156,12 +156,12 @@ def raw_wine_data_with_scraped(drop_table=False):
                     wine_name_fancy,
                     wine_name_plain,
                     wine_name_search,
+                    review_text_lem_no_stop,
                     scraped_wine_id,
                     scraped_wine_search_term,
                     scraped_wine_match,
                     scraped_wine_price,
-                    scraped_wine_location,
-                    review_text_lem_no_stop);''')
+                    scraped_wine_location);''')
     con.commit()
     cur.execute('''INSERT INTO raw_wine_data_with_scraped
                    SELECT * FROM wine_data_raw r
@@ -352,8 +352,8 @@ def top_words_from_reviews_by_wine():
                                             (
                                             SELECT wine_wineId_int
                                               FROM wines
+                                             WHERE wine_qty_reviews > 10
                                              ORDER BY wine_qty_reviews DESC
-                                             LIMIT 41911
                                             )
            ORDER BY r.review_wineId_int DESC'''
 
@@ -361,8 +361,8 @@ def top_words_from_reviews_by_wine():
 
     group_sql = '''SELECT wine_wineId_int
                       FROM wines
+                     WHERE wine_qty_reviews > 10
                      ORDER BY wine_qty_reviews DESC
-                     LIMIT 41911
                     '''
 
     grouper_df = pd.read_sql(group_sql, con)
@@ -379,6 +379,8 @@ def top_words_from_reviews_by_wine():
         for text in group_corpus_list:
             counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
 
+        joined_counts = [(' '.join(word[0]), word[1]) if type(word[0]) is tuple
+                         else (word[0], word[1]) for word in counts.most_common(100)]
         # print(counts)
         # print(counts.most_common(100))
         # exit()
@@ -388,7 +390,7 @@ def top_words_from_reviews_by_wine():
                 INSERT INTO top_words_from_reviews_by_wine (
                         review_wineId_int,
                         word_cloud) VALUES (?,?)''',
-                        (int(group[0]), str(counts.most_common(100))))
+                        (int(group[0]), str(joined_counts)))
             counts.clear()
             counts += Counter()
         except sqlite3.Error as e:
@@ -417,8 +419,8 @@ def top_words_from_reviews_by_variant():
                                             (
                                             SELECT wine_wineId_int
                                               FROM wines
+                                             WHERE wine_qty_reviews > 10
                                              ORDER BY wine_qty_reviews DESC
-                                             LIMIT 41911
                                             )
            ORDER BY r.review_wineId_int DESC'''
 
@@ -428,8 +430,8 @@ def top_words_from_reviews_by_variant():
                    FROM (
                         SELECT wine_variant
                           FROM wines
+                         WHERE wine_qty_reviews > 10
                          ORDER BY wine_qty_reviews DESC
-                         LIMIT 41911
                         )
                    GROUP BY wine_variant
                     '''
@@ -448,6 +450,9 @@ def top_words_from_reviews_by_variant():
         for text in group_corpus_list:
             counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
 
+        joined_counts = [(' '.join(word[0]), word[1]) if type(word[0]) is tuple
+                         else (word[0], word[1]) for word in counts.most_common(100)]
+
         # print(counts)
         # print(counts.most_common(100))
         # exit()
@@ -457,7 +462,7 @@ def top_words_from_reviews_by_variant():
                 INSERT INTO top_words_from_reviews_by_variant (
                         wine_variant,
                         word_cloud) VALUES (?,?)''',
-                        (str(group[0]), str(counts.most_common(100))))
+                        (str(group[0]), str(joined_counts)))
             counts.clear()
             counts += Counter()
         except sqlite3.Error as e:
@@ -467,6 +472,75 @@ def top_words_from_reviews_by_variant():
 
     con.commit()
 
+def top_words_from_reviews_by_price():
+    con = sqlite3.connect('wineapp.db')
+    cur = con.cursor()
+    cur.execute('DROP TABLE IF EXISTS top_words_from_reviews_by_price')
+    cur.execute('''CREATE TABLE top_words_from_reviews_by_price (
+                        wine_price_range,
+                        word_cloud);''')
+    con.commit()
+
+    sql = '''SELECT r.review_wineId_int, r.review_text_lem_no_stop,
+            CASE WHEN CAST(w.scraped_wine_price AS float) > 0 AND CAST(w.scraped_wine_price AS float) <= 15 THEN '0-15'
+                     WHEN CAST(w.scraped_wine_price AS float) > 15 AND CAST(w.scraped_wine_price AS float) <= 25 THEN '15-20'
+                     WHEN CAST(w.scraped_wine_price AS float) > 25 AND CAST(w.scraped_wine_price AS float) <= 40 THEN '20-30'
+                     WHEN CAST(w.scraped_wine_price AS float) > 40 AND CAST(w.scraped_wine_price AS float) <= 60 THEN '30-40'
+                     WHEN CAST(w.scraped_wine_price AS float) > 60 AND CAST(w.scraped_wine_price AS float) <= 90 THEN '40-70'
+                     WHEN CAST(w.scraped_wine_price AS float) > 90 AND CAST(w.scraped_wine_price AS float) <= 150 THEN '70-100'
+                     WHEN CAST(w.scraped_wine_price AS float) > 150 AND CAST(w.scraped_wine_price AS float) <= 10000 THEN '100+'
+              END price_cat
+               FROM reviews r
+               LEFT JOIN wines w
+                 ON r.review_wineId_int = w.wine_wineId_int
+              WHERE r.review_wineId_int IN 
+                                            (
+                                            SELECT wine_wineId_int
+                                              FROM wines
+                                             WHERE wine_qty_reviews > 10
+                                               AND CAST(scraped_wine_price AS float)  IS NOT NULL
+                                               AND CAST(scraped_wine_price AS float)  > 0
+                                             ORDER BY wine_qty_reviews DESC
+                                            )
+           ORDER BY r.review_wineId_int DESC'''
+
+    df = pd.read_sql(sql, con)
+
+    grouper_lst = ['0-15', '15-20', '20-30', '30-40', '40-70', '70-100', '100+']
+
+    # Ignore this:
+    # Side note for text wrangler for regex search to select all numbers \d{1,7}
+
+    for group in grouper_lst:
+        group_review_df = df.loc[df['price_cat'] == group]
+        group_corpus_list = [i for i in group_review_df['review_text_lem_no_stop']]
+
+        counts = Counter()
+
+        for text in group_corpus_list:
+            counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+
+        joined_counts = [(' '.join(word[0]), word[1]) if type(word[0]) is tuple
+                         else (word[0], word[1]) for word in counts.most_common(100)]
+
+        # print(counts)
+        # print(counts.most_common(100))
+        # exit()
+        # counts = low_weight_words(counts)
+        try:
+            cur.execute('''
+                INSERT INTO top_words_from_reviews_by_price (
+                        wine_price_range,
+                        word_cloud) VALUES (?,?)''',
+                        (str(group), str(joined_counts)))
+            counts.clear()
+            counts += Counter()
+        except sqlite3.Error as e:
+            print("Top words by price, insert error:", e.args[0])
+            counts.clear()
+            counts += Counter()
+
+    con.commit()
 
 def populate_wines_old():
     con = sqlite3.connect('wineapp.db')
@@ -694,6 +768,9 @@ def low_weight_words(counter):
 
 
 if __name__ == '__main__':
+    begin_time = datetime.now()
+    print(begin_time)
+
     con = sqlite3.connect('wineapp.db')
     cur = con.cursor()
     cur.execute('DROP TABLE IF EXISTS wine_data_raw')
@@ -728,11 +805,12 @@ if __name__ == '__main__':
     # very closely. Again, non-unique wine_id's really threw a wrench into this - hence all these weirdisms.
     #############################################
 
-    populate_reviews(drop_table=True)
+    populate_reviews(drop_table=False)
+
+    # WORD CLOUDS #############################################
     top_words_from_reviews_by_wine()
     top_words_from_reviews_by_variant()
+    top_words_from_reviews_by_price()
 
-    #############################################
-    # Older Routines or Unused
-    #############################################
-    # populate_wines()
+    end_time = datetime.now()
+    print(end_time-begin_time)

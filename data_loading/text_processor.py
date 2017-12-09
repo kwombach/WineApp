@@ -25,7 +25,7 @@ def remove_stop_then_lem(text, stop_words):
 
 def remove(text, stop_words):
     text = "".join(l for l in text if l not in string.punctuation)
-
+    text = text.replace("'", "")
     # stop_words = stopwords.words('english')
     #
     # for line in open('low_weight_words.txt', 'r'):
@@ -36,6 +36,7 @@ def remove(text, stop_words):
 
     filtered_sentence = [w for w in word_tokens if not w in stop_words]
     sentence = ' '.join(filtered_sentence)
+    sentence = re.sub(r'\d+', '', sentence)
     return sentence
 
 
