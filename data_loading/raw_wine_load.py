@@ -805,7 +805,7 @@ if __name__ == '__main__':
     # very closely. Again, non-unique wine_id's really threw a wrench into this - hence all these weirdisms.
     #############################################
 
-    populate_reviews(drop_table=False)
+    populate_reviews(drop_table=True)
 
     # WORD CLOUDS #############################################
     top_words_from_reviews_by_wine()
