@@ -19,8 +19,11 @@ nltk.download('stop words')
 ##########################
 
 
+# def remove_stop_then_lem(text, stop_words):
+#     return tokenize(remove(text, stop_words))
+
 def remove_stop_then_lem(text, stop_words):
-    return tokenize(remove(text, stop_words))
+    return remove(tokenize(text), stop_words)
 
 
 def remove(text, stop_words):

@@ -352,7 +352,7 @@ def top_words_from_reviews_by_wine():
                                             (
                                             SELECT wine_wineId_int
                                               FROM wines
-                                             WHERE wine_qty_reviews > 10
+                                             WHERE wine_qty_reviews > 14
                                              ORDER BY wine_qty_reviews DESC
                                             )
            ORDER BY r.review_wineId_int DESC'''
@@ -361,7 +361,7 @@ def top_words_from_reviews_by_wine():
 
     group_sql = '''SELECT wine_wineId_int
                       FROM wines
-                     WHERE wine_qty_reviews > 10
+                     WHERE wine_qty_reviews > 14
                      ORDER BY wine_qty_reviews DESC
                     '''
 
@@ -377,7 +377,8 @@ def top_words_from_reviews_by_wine():
         counts = Counter()
 
         for text in group_corpus_list:
-            counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+            # counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+            counts.update(word for word in text.split())
 
         joined_counts = [(' '.join(word[0]), word[1]) if type(word[0]) is tuple
                          else (word[0], word[1]) for word in counts.most_common(100)]
@@ -419,7 +420,7 @@ def top_words_from_reviews_by_variant():
                                             (
                                             SELECT wine_wineId_int
                                               FROM wines
-                                             WHERE wine_qty_reviews > 10
+                                             WHERE wine_qty_reviews > 14
                                              ORDER BY wine_qty_reviews DESC
                                             )
            ORDER BY r.review_wineId_int DESC'''
@@ -430,7 +431,7 @@ def top_words_from_reviews_by_variant():
                    FROM (
                         SELECT wine_variant
                           FROM wines
-                         WHERE wine_qty_reviews > 10
+                         WHERE wine_qty_reviews > 14
                          ORDER BY wine_qty_reviews DESC
                         )
                    GROUP BY wine_variant
@@ -448,7 +449,8 @@ def top_words_from_reviews_by_variant():
         counts = Counter()
 
         for text in group_corpus_list:
-            counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+            # counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+            counts.update(word for word in text.split())
 
         joined_counts = [(' '.join(word[0]), word[1]) if type(word[0]) is tuple
                          else (word[0], word[1]) for word in counts.most_common(100)]
@@ -497,7 +499,7 @@ def top_words_from_reviews_by_price():
                                             (
                                             SELECT wine_wineId_int
                                               FROM wines
-                                             WHERE wine_qty_reviews > 10
+                                             WHERE wine_qty_reviews > 14
                                                AND CAST(scraped_wine_price AS float)  IS NOT NULL
                                                AND CAST(scraped_wine_price AS float)  > 0
                                              ORDER BY wine_qty_reviews DESC
@@ -518,7 +520,8 @@ def top_words_from_reviews_by_price():
         counts = Counter()
 
         for text in group_corpus_list:
-            counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+            # counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+            counts.update(word for word in text.split())
 
         joined_counts = [(' '.join(word[0]), word[1]) if type(word[0]) is tuple
                          else (word[0], word[1]) for word in counts.most_common(100)]
