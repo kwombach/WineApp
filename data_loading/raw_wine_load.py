@@ -6,8 +6,10 @@ import unicodedata
 import html
 from collections import Counter
 import text_processor
+import get_rec_by_word
 from nltk.corpus import stopwords
 from datetime import datetime
+import pickle
 
 def find_ngrams(input_list, n):
     return zip(*[input_list[i:] for i in range(n)])
@@ -545,6 +547,82 @@ def top_words_from_reviews_by_price():
 
     con.commit()
 
+def top_words_without_frequency_from_reviews_by_wine():
+    con = sqlite3.connect('wineapp.db')
+    cur = con.cursor()
+    cur.execute('DROP TABLE IF EXISTS top_words_from_reviews_by_wine_ordered_no_freq')
+    cur.execute('''CREATE TABLE top_words_from_reviews_by_wine_ordered_no_freq (
+                        review_wineId_int,
+                        word_cloud);''')
+    con.commit()
+
+    sql = '''SELECT r.review_wineId_int, r.review_text_lem_no_stop, w.wine_name_plain, 
+                    w.scraped_wine_price, w.wine_qty_reviews
+               FROM reviews r
+               LEFT JOIN wines w
+                 ON r.review_wineId_int = w.wine_wineId_int
+              WHERE r.review_wineId_int IN 
+                                            (
+                                            SELECT wine_wineId_int
+                                              FROM wines
+                                             WHERE wine_qty_reviews > 9
+                                             ORDER BY wine_qty_reviews DESC
+                                            )
+           ORDER BY r.review_wineId_int DESC'''
+
+    df = pd.read_sql(sql, con)
+
+    group_sql = '''SELECT wine_wineId_int
+                      FROM wines
+                     WHERE wine_qty_reviews > 9
+                     ORDER BY wine_qty_reviews DESC
+                    '''
+
+    grouper_df = pd.read_sql(group_sql, con)
+
+    # Ignore this:
+    # Side note for text wrangler for regex search to select all numbers \d{1,7}
+
+    for group in grouper_df.values:
+        group_review_df = df.loc[df['review_wineId_int'] == group[0]]
+        group_corpus_list = [i for i in group_review_df['review_text_lem_no_stop']]
+
+        counts = Counter()
+
+        for text in group_corpus_list:
+            # counts.update(word for word in text.split() + list(find_ngrams(text.split(), 2)))
+            counts.update(word for word in text.split())
+
+        joined_words_in_order = [' '.join(word[0]) if type(word[0]) is tuple
+                                 else word[0] for word in counts.most_common(100)]
+
+        try:
+            cur.execute('''
+                INSERT INTO top_words_from_reviews_by_wine_ordered_no_freq (
+                        review_wineId_int,
+                        word_cloud) VALUES (?,?)''',
+                        (int(group[0]), str(joined_words_in_order)))
+            counts.clear()
+            counts += Counter()
+        except sqlite3.Error as e:
+            print("Top words by wine, insert error:", e.args[0])
+            counts.clear()
+            counts += Counter()
+
+    con.commit()
+
+def pickle_wine_table():
+    con = sqlite3.connect('wineapp.db')
+    cur = con.cursor()
+
+    sql = '''SELECT wine_wineId_int, wine_name_plain, wine_qty_reviews
+               FROM wines'''
+
+    df = pd.read_sql(sql, con)
+
+    pickle.dump(df, open("wine_table.p", "wb"))
+
+
 def populate_wines_old():
     con = sqlite3.connect('wineapp.db')
     cur = con.cursor()
@@ -774,46 +852,58 @@ if __name__ == '__main__':
     begin_time = datetime.now()
     print(begin_time)
 
-    con = sqlite3.connect('wineapp.db')
-    cur = con.cursor()
-    cur.execute('DROP TABLE IF EXISTS wine_data_raw')
-    cur.execute('''
-        CREATE TABLE wine_data_raw (
-                    chunk_id,
-                    review_points,
-                    review_text,
-                    review_time,
-                    review_userId,
-                    review_userName,
-                    wine_name,
-                    wine_variant,
-                    wine_wineId,
-                    wine_year,
-                    wine_name_fancy,
-                    wine_name_plain,
-                    wine_name_search,
-                    review_text_lem_no_stop);''')
-    con.commit()
-
-    main('cellartracker-clean1.csv')
-    main('cellartracker-clean2.csv')
-    scraped_wine_raw()
-
-    raw_wine_data_with_scraped()
-    populate_wines_new()
-    populate_users()
+    # con = sqlite3.connect('wineapp.db')
+    # cur = con.cursor()
+    # cur.execute('DROP TABLE IF EXISTS wine_data_raw')
+    # cur.execute('''
+    #     CREATE TABLE wine_data_raw (
+    #                 chunk_id,
+    #                 review_points,
+    #                 review_text,
+    #                 review_time,
+    #                 review_userId,
+    #                 review_userName,
+    #                 wine_name,
+    #                 wine_variant,
+    #                 wine_wineId,
+    #                 wine_year,
+    #                 wine_name_fancy,
+    #                 wine_name_plain,
+    #                 wine_name_search,
+    #                 review_text_lem_no_stop);''')
+    # con.commit()
+    #
+    # main('cellartracker-clean1.csv')
+    # main('cellartracker-clean2.csv')
+    # scraped_wine_raw()
+    #
+    # raw_wine_data_with_scraped()
+    # populate_wines_new()
+    # populate_users()
 
     #############################################
     # DO THIS LAST: This should drop some tables. If you're tempted to NOT drop the tables. Review data
     # very closely. Again, non-unique wine_id's really threw a wrench into this - hence all these weirdisms.
     #############################################
 
-    populate_reviews(drop_table=True)
+    # populate_reviews(drop_table=True)
 
     # WORD CLOUDS #############################################
-    top_words_from_reviews_by_wine()
-    top_words_from_reviews_by_variant()
-    top_words_from_reviews_by_price()
+    # top_words_from_reviews_by_wine()
+    # top_words_from_reviews_by_variant()
+    # top_words_from_reviews_by_price()
+    # top_words_without_frequency_from_reviews_by_wine()
+
+    ##################################################################
+    # PICKLE OUT THINGS FOR FASTER PERFORMANCE ON RECOMMENDER BY WORDS
+    ##################################################################
+
+    pickle.dump(get_rec_by_word.word_cloud_gather('wine_ordered_no_freq',
+                                                  'review_wineId_int'), open("word_freqs.p", "wb"))
+
+    pickle_wine_table()
+
+    ##################################################################
 
     end_time = datetime.now()
     print(end_time-begin_time)
