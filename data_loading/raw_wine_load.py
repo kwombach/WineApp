@@ -352,7 +352,7 @@ def top_words_from_reviews_by_wine():
                                             (
                                             SELECT wine_wineId_int
                                               FROM wines
-                                             WHERE wine_qty_reviews > 14
+                                             WHERE wine_qty_reviews > 9
                                              ORDER BY wine_qty_reviews DESC
                                             )
            ORDER BY r.review_wineId_int DESC'''
@@ -361,7 +361,7 @@ def top_words_from_reviews_by_wine():
 
     group_sql = '''SELECT wine_wineId_int
                       FROM wines
-                     WHERE wine_qty_reviews > 14
+                     WHERE wine_qty_reviews > 9
                      ORDER BY wine_qty_reviews DESC
                     '''
 
@@ -420,7 +420,7 @@ def top_words_from_reviews_by_variant():
                                             (
                                             SELECT wine_wineId_int
                                               FROM wines
-                                             WHERE wine_qty_reviews > 14
+                                             WHERE wine_qty_reviews > 9
                                              ORDER BY wine_qty_reviews DESC
                                             )
            ORDER BY r.review_wineId_int DESC'''
@@ -431,7 +431,7 @@ def top_words_from_reviews_by_variant():
                    FROM (
                         SELECT wine_variant
                           FROM wines
-                         WHERE wine_qty_reviews > 14
+                         WHERE wine_qty_reviews > 9
                          ORDER BY wine_qty_reviews DESC
                         )
                    GROUP BY wine_variant
@@ -499,7 +499,7 @@ def top_words_from_reviews_by_price():
                                             (
                                             SELECT wine_wineId_int
                                               FROM wines
-                                             WHERE wine_qty_reviews > 14
+                                             WHERE wine_qty_reviews > 9
                                                AND CAST(scraped_wine_price AS float)  IS NOT NULL
                                                AND CAST(scraped_wine_price AS float)  > 0
                                              ORDER BY wine_qty_reviews DESC
