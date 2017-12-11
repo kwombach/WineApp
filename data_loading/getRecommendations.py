@@ -6,7 +6,7 @@ from fuzzywuzzy import fuzz
 
 
 def selectWine(wine_string):
-	con = sqlite3.connect('wine2wine.db')
+	con = sqlite3.connect('winepp.db')
 	cur = con.cursor()
 	sql = '''SELECT wine_wineId_int, wine_name_plain FROM wines WHERE wine_qty_reviews < 9 ORDER by wine_qty_reviews DESC'''
 	wines = pd.read_sql(sql, con)
@@ -17,7 +17,7 @@ def selectWine(wine_string):
 	return wine_match_id, score
 
 def recommed(wine_id):
-	con = sqlite3.connect('wine2wine.db')
+	con = sqlite3.connect('wineapp.db')
 	cur = con.cursor()
 	sql = '''SELECT  w1.wine_name_plain as query,
 			 w2.wine_name_plain as similar_wine_1,

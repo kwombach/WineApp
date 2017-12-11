@@ -69,15 +69,15 @@ def run():
 	list_of_reviews = getReviews()
 	matrix = vectorize(list_of_reviews)
 	similarity_matrix = getSimilarity(matrix)
-	similarity_matrix.tofile('sim_mat.csv', sep = ',')
+	# similarity_matrix.tofile('sim_mat.csv', sep = ',')
 	# a.tofile('foo.csv',sep=','
 	# with open('sim_mat.csv', 'w') as sm:
 	# 	for row in similarity_matrix:
 	# 		writer = csv.writer(sm)
 	# 		writer.writerows(row)
 
-	# df = pd.DataFrame(similarity_matrix)
-	# df.to_csv('similarity_matrix.csv')
+	df = pd.DataFrame(similarity_matrix)
+	df.to_csv('similarity_matrix.csv')
 	print('.csv file made!')
 	return similarity_matrix
 
