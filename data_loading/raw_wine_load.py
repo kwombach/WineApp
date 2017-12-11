@@ -11,6 +11,7 @@ from nltk.corpus import stopwords
 from datetime import datetime
 import pickle
 
+
 def find_ngrams(input_list, n):
     return zip(*[input_list[i:] for i in range(n)])
 
@@ -852,47 +853,47 @@ if __name__ == '__main__':
     begin_time = datetime.now()
     print(begin_time)
 
-    # con = sqlite3.connect('wineapp.db')
-    # cur = con.cursor()
-    # cur.execute('DROP TABLE IF EXISTS wine_data_raw')
-    # cur.execute('''
-    #     CREATE TABLE wine_data_raw (
-    #                 chunk_id,
-    #                 review_points,
-    #                 review_text,
-    #                 review_time,
-    #                 review_userId,
-    #                 review_userName,
-    #                 wine_name,
-    #                 wine_variant,
-    #                 wine_wineId,
-    #                 wine_year,
-    #                 wine_name_fancy,
-    #                 wine_name_plain,
-    #                 wine_name_search,
-    #                 review_text_lem_no_stop);''')
-    # con.commit()
-    #
-    # main('cellartracker-clean1.csv')
-    # main('cellartracker-clean2.csv')
-    # scraped_wine_raw()
-    #
-    # raw_wine_data_with_scraped()
-    # populate_wines_new()
-    # populate_users()
+    con = sqlite3.connect('wineapp.db')
+    cur = con.cursor()
+    cur.execute('DROP TABLE IF EXISTS wine_data_raw')
+    cur.execute('''
+        CREATE TABLE wine_data_raw (
+                    chunk_id,
+                    review_points,
+                    review_text,
+                    review_time,
+                    review_userId,
+                    review_userName,
+                    wine_name,
+                    wine_variant,
+                    wine_wineId,
+                    wine_year,
+                    wine_name_fancy,
+                    wine_name_plain,
+                    wine_name_search,
+                    review_text_lem_no_stop);''')
+    con.commit()
+
+    main('cellartracker-clean1.csv')
+    main('cellartracker-clean2.csv')
+    scraped_wine_raw()
+
+    raw_wine_data_with_scraped()
+    populate_wines_new()
+    populate_users()
 
     #############################################
     # DO THIS LAST: This should drop some tables. If you're tempted to NOT drop the tables. Review data
     # very closely. Again, non-unique wine_id's really threw a wrench into this - hence all these weirdisms.
     #############################################
 
-    # populate_reviews(drop_table=True)
+    populate_reviews(drop_table=True)
 
     # WORD CLOUDS #############################################
-    # top_words_from_reviews_by_wine()
-    # top_words_from_reviews_by_variant()
-    # top_words_from_reviews_by_price()
-    # top_words_without_frequency_from_reviews_by_wine()
+    top_words_from_reviews_by_wine()
+    top_words_from_reviews_by_variant()
+    top_words_from_reviews_by_price()
+    top_words_without_frequency_from_reviews_by_wine()
 
     ##################################################################
     # PICKLE OUT THINGS FOR FASTER PERFORMANCE ON RECOMMENDER BY WORDS
