@@ -13,7 +13,7 @@ def sim_matrix_to_sql_table(filename):
     # Think about reading a .csv generated from that routine
     #################################################################################
 
-    sql = '''SELECT wine_wineId_int FROM wines ORDER by wine_qty_reviews DESC LIMIT 50'''
+    sql = '''SELECT wine_wineId_int FROM wines WHERE wine_qty_reviews > 9 ORDER by wine_qty_reviews DESC'''
     wine_ids = pd.read_sql(sql, con_wdb)
 
     #################################################################################

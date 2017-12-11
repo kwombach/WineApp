@@ -6,20 +6,18 @@ from fuzzywuzzy import fuzz
 
 
 def selectWine(wine_string):
-	con = sqlite3.connect('../data_loading/wineapp.db')
+	con = sqlite3.connect('wine2wine.db')
 	cur = con.cursor()
-	sql = '''SELECT wine_wineId_int, wine_name_plain FROM wines ORDER by wine_qty_reviews DESC LIMIT 50'''
+	sql = '''SELECT wine_wineId_int, wine_name_plain FROM wines WHERE wine_qty_reviews < 9 ORDER by wine_qty_reviews DESC'''
 	wines = pd.read_sql(sql, con)
 	wines = wines.set_index(['wine_wineId_int'])
-
 	choices = wines['wine_name_plain']
-
 	wine_match, score, wine_match_id = process.extract(wine_string, choices, scorer = fuzz.partial_ratio, limit=1)[0]
-
+	print(wine_match)
 	return wine_match_id, score
 
 def recommed(wine_id):
-	con = sqlite3.connect('../data_loading/wineapp.db')
+	con = sqlite3.connect('wine2wine.db')
 	cur = con.cursor()
 	sql = '''SELECT  w1.wine_name_plain as query,
 			 w2.wine_name_plain as similar_wine_1,
@@ -63,11 +61,11 @@ def recommed(wine_id):
 def getRecs(wine_query):
 	arg = str(wine_query)
 	wine_id, score = selectWine(arg)
-	if score > 80:
+	if score > 50:
 		recs = recommed(wine_id)
+		return recs
 	else:
 		print('No Match')
-	return recs
 
 
 

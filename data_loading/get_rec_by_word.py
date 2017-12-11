@@ -113,6 +113,6 @@ def recommend_by_word(user_input_cleaned, wines):
     return final_match_list
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    main('xyz')
+#     main('xyz')
