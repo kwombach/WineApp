@@ -6,14 +6,15 @@ from fuzzywuzzy import fuzz
 
 
 def selectWine(wine_string):
-	con = sqlite3.connect('winepp.db')
+	con = sqlite3.connect('wineapp.db')
 	cur = con.cursor()
-	sql = '''SELECT wine_wineId_int, wine_name_plain FROM wines WHERE wine_qty_reviews < 9 ORDER by wine_qty_reviews DESC'''
+	sql = '''SELECT wine_wineId_int, wine_name_plain FROM wines WHERE wine_qty_reviews > 9 ORDER by wine_qty_reviews'''
 	wines = pd.read_sql(sql, con)
 	wines = wines.set_index(['wine_wineId_int'])
 	choices = wines['wine_name_plain']
 	wine_match, score, wine_match_id = process.extract(wine_string, choices, scorer = fuzz.partial_ratio, limit=1)[0]
-	print(wine_match)
+	# print(wines)
+	# print(wine_match_id, wine_match)
 	return wine_match_id, score
 
 def recommed(wine_id):
